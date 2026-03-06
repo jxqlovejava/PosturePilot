@@ -1,0 +1,7 @@
+{
+  "name": "PosturePilot",
+  "description": "Smart posture and health management tool using webcam to monitor and correct sitting posture.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
