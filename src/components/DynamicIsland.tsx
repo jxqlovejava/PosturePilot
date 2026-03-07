@@ -8,7 +8,7 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export type IslandState = 'hidden' | 'idle' | 'warning_left' | 'warning_right' | 'warning_slouch' | 'warning_lean_forward' | 'rest' | 'good';
+export type IslandState = 'hidden' | 'idle' | 'warning_left' | 'warning_right' | 'warning_slouch' | 'warning_too_close' | 'warning_too_far' | 'warning_lean_forward' | 'rest' | 'good';
 
 interface DynamicIslandProps {
   state: IslandState;
@@ -81,6 +81,32 @@ export function DynamicIsland({ state, timeLeft, isActive, isCameraEnabled, onRe
           >
             <ArrowDown className="w-6 h-6 animate-bounce shrink-0" />
             <span className="font-medium text-sm whitespace-nowrap">{t.warning_lean_forward}</span>
+          </motion.div>
+        );
+      case 'warning_too_close':
+        return (
+          <motion.div
+            key="warning_too_close"
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.8 }}
+            className="flex items-center gap-3 px-4 py-2 text-red-400"
+          >
+            <ArrowDown className="w-6 h-6 animate-bounce shrink-0" />
+            <span className="font-medium text-sm whitespace-nowrap">{t.warning_too_close}</span>
+          </motion.div>
+        );
+      case 'warning_too_far':
+        return (
+          <motion.div
+            key="warning_too_far"
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.8 }}
+            className="flex items-center gap-3 px-4 py-2 text-red-400"
+          >
+            <ArrowUp className="w-6 h-6 animate-bounce shrink-0" />
+            <span className="font-medium text-sm whitespace-nowrap">{t.warning_too_far}</span>
           </motion.div>
         );
       case 'rest':
@@ -159,6 +185,8 @@ export function DynamicIsland({ state, timeLeft, isActive, isCameraEnabled, onRe
       case 'warning_right':
       case 'warning_slouch':
       case 'warning_lean_forward':
+      case 'warning_too_close':
+      case 'warning_too_far':
         return { width: 320, height: 48, borderRadius: 24 };
       case 'rest':
         return { width: 220, height: 56, borderRadius: 28 };

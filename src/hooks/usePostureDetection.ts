@@ -4,22 +4,25 @@ import '@tensorflow/tfjs-backend-webgl';
 import '@tensorflow/tfjs-backend-cpu';
 import * as poseDetection from '@tensorflow-models/pose-detection';
 
-export type PostureState = 'good' | 'tilt_left' | 'tilt_right' | 'slouch' | 'lean_forward';
+export type PostureState = 'good' | 'tilt_left' | 'tilt_right' | 'slouch' | 'too_close' | 'too_far' | 'lean_forward';
 
 interface UsePostureDetectionProps {
   enabled: boolean;
   sensitivity: number; // Angle threshold in degrees
+  enableDistanceMonitoring?: boolean;
   onPostureChange: (state: PostureState) => void;
   videoRef: RefObject<HTMLVideoElement>;
   canvasRef?: RefObject<HTMLCanvasElement>;
+  showDebug?: boolean;
 }
 
-export function usePostureDetection({ enabled, sensitivity, onPostureChange, videoRef, canvasRef }: UsePostureDetectionProps) {
+export function usePostureDetection({ enabled, sensitivity, enableDistanceMonitoring = false, onPostureChange, videoRef, canvasRef, showDebug = false }: UsePostureDetectionProps) {
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [isReady, setIsReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [currentAngle, setCurrentAngle] = useState(0);
   const [currentState, setCurrentState] = useState<PostureState>('good');
+  const [debugInfo, setDebugInfo] = useState<any>(null);
   const detectorRef = useRef<poseDetection.PoseDetector | null>(null);
   const requestRef = useRef<number>(null);
   
@@ -131,19 +134,23 @@ export function usePostureDetection({ enabled, sensitivity, onPostureChange, vid
     }
   }, [enabled]);
 
+  // Reset baseline when stream changes or enabled becomes true
+  useEffect(() => {
+    if (enabled && stream) {
+      hasDetectedRef.current = false;
+      pendingStateRef.current = 'good';
+      pendingStateStartTimeRef.current = 0;
+      smoothedAngleRef.current = 0;
+      smoothedFaceWidthRef.current = 0;
+      smoothedTorsoHeightRef.current = 0;
+      baselineFaceWidthRef.current = 0;
+      baselineTorsoHeightRef.current = 0;
+      baselineFramesCountRef.current = 0;
+    }
+  }, [enabled, stream]);
+
   // 3. Detection loop
   useEffect(() => {
-    // Reset detection state when sensitivity or stream changes to ensure immediate effect
-    hasDetectedRef.current = false;
-    pendingStateRef.current = 'good';
-    pendingStateStartTimeRef.current = 0;
-    smoothedAngleRef.current = 0;
-    smoothedFaceWidthRef.current = 0;
-    smoothedTorsoHeightRef.current = 0;
-    baselineFaceWidthRef.current = 0;
-    baselineTorsoHeightRef.current = 0;
-    baselineFramesCountRef.current = 0;
-    
     const video = videoRef.current;
     if (!enabled || !isReady || !video || !detectorRef.current || !stream) return;
 
@@ -165,7 +172,7 @@ export function usePostureDetection({ enabled, sensitivity, onPostureChange, vid
         if (poses.length > 0) {
           const pose = poses[0];
           
-          // Draw keypoints if canvas is provided
+          // Draw keypoints if canvas is provided and debug is enabled
           if (canvasRef?.current && video) {
             const ctx = canvasRef.current.getContext('2d');
             if (ctx) {
@@ -173,35 +180,37 @@ export function usePostureDetection({ enabled, sensitivity, onPostureChange, vid
               canvasRef.current.height = video.videoHeight;
               ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
               
-              // Draw points
-              pose.keypoints.forEach(keypoint => {
-                if (keypoint.score && keypoint.score > 0.3) {
-                  ctx.beginPath();
-                  ctx.arc(keypoint.x, keypoint.y, 5, 0, 2 * Math.PI);
-                  ctx.fillStyle = 'rgba(16, 185, 129, 0.8)'; // Emerald 500
-                  ctx.fill();
-                }
-              });
-              
-              // Draw lines for eyes and shoulders
-              const drawLine = (p1: any, p2: any) => {
-                if (p1 && p2 && p1.score > 0.3 && p2.score > 0.3) {
-                  ctx.beginPath();
-                  ctx.moveTo(p1.x, p1.y);
-                  ctx.lineTo(p2.x, p2.y);
-                  ctx.strokeStyle = 'rgba(16, 185, 129, 0.5)';
-                  ctx.lineWidth = 2;
-                  ctx.stroke();
-                }
-              };
-              
-              const leftEye = pose.keypoints.find(k => k.name === 'left_eye');
-              const rightEye = pose.keypoints.find(k => k.name === 'right_eye');
-              const leftShoulder = pose.keypoints.find(k => k.name === 'left_shoulder');
-              const rightShoulder = pose.keypoints.find(k => k.name === 'right_shoulder');
-              
-              drawLine(leftEye, rightEye);
-              drawLine(leftShoulder, rightShoulder);
+              if (showDebug) {
+                // Draw points
+                pose.keypoints.forEach(keypoint => {
+                  if (keypoint.score && keypoint.score > 0.3) {
+                    ctx.beginPath();
+                    ctx.arc(keypoint.x, keypoint.y, 5, 0, 2 * Math.PI);
+                    ctx.fillStyle = 'rgba(16, 185, 129, 0.8)'; // Emerald 500
+                    ctx.fill();
+                  }
+                });
+                
+                // Draw lines for eyes and shoulders
+                const drawLine = (p1: any, p2: any) => {
+                  if (p1 && p2 && p1.score > 0.3 && p2.score > 0.3) {
+                    ctx.beginPath();
+                    ctx.moveTo(p1.x, p1.y);
+                    ctx.lineTo(p2.x, p2.y);
+                    ctx.strokeStyle = 'rgba(16, 185, 129, 0.5)';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                  }
+                };
+                
+                const leftEye = pose.keypoints.find(k => k.name === 'left_eye');
+                const rightEye = pose.keypoints.find(k => k.name === 'right_eye');
+                const leftShoulder = pose.keypoints.find(k => k.name === 'left_shoulder');
+                const rightShoulder = pose.keypoints.find(k => k.name === 'right_shoulder');
+                
+                drawLine(leftEye, rightEye);
+                drawLine(leftShoulder, rightShoulder);
+              }
             }
           }
 
@@ -304,26 +313,44 @@ export function usePostureDetection({ enabled, sensitivity, onPostureChange, vid
             const percentThreshold = 0.15 + ((sensitivity - 3) / 12) * 0.2;
             
             // Hysteresis: if already in a warning state, make it easier to stay in that state
-            const currentFwThreshold = pendingStateRef.current === 'lean_forward' ? percentThreshold * 0.75 : percentThreshold;
             const currentThThreshold = pendingStateRef.current === 'slouch' ? percentThreshold * 0.75 : percentThreshold;
+            const currentCloseThreshold = pendingStateRef.current === 'too_close' ? percentThreshold * 0.75 : percentThreshold;
+            const currentFarThreshold = pendingStateRef.current === 'too_far' ? percentThreshold * 0.75 : percentThreshold;
+            const currentLeanThreshold = pendingStateRef.current === 'lean_forward' ? percentThreshold * 0.75 : percentThreshold;
 
-            // Check for slouching and leaning forward first
-            const isLeaningForward = baselineFramesCountRef.current >= 30 && hasFaceWidth && faceWidth > baselineFaceWidthRef.current * (1 + currentFwThreshold);
+            // Check for slouching and distance first
+            const isTooClose = enableDistanceMonitoring && baselineFramesCountRef.current >= 30 && hasFaceWidth && faceWidth > baselineFaceWidthRef.current * (1 + currentCloseThreshold);
+            const isTooFar = enableDistanceMonitoring && baselineFramesCountRef.current >= 30 && hasFaceWidth && faceWidth < baselineFaceWidthRef.current * (1 - currentFarThreshold);
             const isSlouching = baselineFramesCountRef.current >= 30 && hasTorsoHeight && torsoHeight < baselineTorsoHeightRef.current * (1 - currentThThreshold);
+            
+            // Leaning forward: face gets closer to camera relative to torso
+            const currentRatio = hasFaceWidth && hasTorsoHeight && torsoHeight > 0 ? faceWidth / torsoHeight : 0;
+            const baselineRatio = baselineTorsoHeightRef.current > 0 ? baselineFaceWidthRef.current / baselineTorsoHeightRef.current : 0;
+            const isLeaningForward = baselineFramesCountRef.current >= 30 && currentRatio > 0 && baselineRatio > 0 && currentRatio > baselineRatio * (1 + currentLeanThreshold);
 
-            if (isLeaningForward && isSlouching) {
+            if (isLeaningForward) {
+              currentState = 'lean_forward';
+            } else if (isTooClose && isSlouching) {
               // If both are true, prefer the one we are already in to prevent rapid toggling
               if (pendingStateRef.current === 'slouch') {
                 currentState = 'slouch';
               } else {
-                currentState = 'lean_forward';
+                currentState = 'too_close';
               }
-            } else if (isLeaningForward) {
-              currentState = 'lean_forward';
+            } else if (isTooFar && isSlouching) {
+              if (pendingStateRef.current === 'slouch') {
+                currentState = 'slouch';
+              } else {
+                currentState = 'too_far';
+              }
+            } else if (isTooClose) {
+              currentState = 'too_close';
+            } else if (isTooFar) {
+              currentState = 'too_far';
             } else if (isSlouching) {
               currentState = 'slouch';
             } else if (angleDeg > currentThreshold) {
-              // Only check for left/right tilt if not slouching or leaning forward
+              // Only check for left/right tilt if not slouching or distance issues
               currentState = 'tilt_left';
             } else if (angleDeg < -currentThreshold) {
               currentState = 'tilt_right';
@@ -331,6 +358,15 @@ export function usePostureDetection({ enabled, sensitivity, onPostureChange, vid
             
             setCurrentAngle(angleDeg);
             setCurrentState(currentState);
+            setDebugInfo({
+              faceWidth: faceWidth.toFixed(2),
+              baselineFaceWidth: baselineFaceWidthRef.current.toFixed(2),
+              torsoHeight: torsoHeight.toFixed(2),
+              baselineTorsoHeight: baselineTorsoHeightRef.current.toFixed(2),
+              headAngle: hasHeadAngle ? headAngle.toFixed(2) : 'N/A',
+              bodyAngle: hasBodyAngle ? bodyAngle.toFixed(2) : 'N/A',
+              smoothedAngle: angleDeg.toFixed(2)
+            });
 
             if (!hasDetectedRef.current) {
               // Immediate detection on first successful frame or after settings change
@@ -353,7 +389,7 @@ export function usePostureDetection({ enabled, sensitivity, onPostureChange, vid
                 debounceTime = 500;
               } else if (lastStateRef.current !== 'good') {
                 // Transitioning between different warning states
-                if ((currentState === 'slouch' || currentState === 'lean_forward') && 
+                if ((currentState === 'slouch' || currentState === 'lean_forward' || currentState === 'too_close' || currentState === 'too_far') && 
                     (lastStateRef.current === 'tilt_left' || lastStateRef.current === 'tilt_right')) {
                   debounceTime = 0; // Upgrade priority immediately
                 } else {
@@ -387,7 +423,7 @@ export function usePostureDetection({ enabled, sensitivity, onPostureChange, vid
         cancelAnimationFrame(requestRef.current);
       }
     };
-  }, [enabled, isReady, sensitivity, onPostureChange, stream]);
+  }, [enabled, isReady, sensitivity, enableDistanceMonitoring, onPostureChange, stream, showDebug]);
 
-  return { stream, isReady, error, currentAngle, currentState };
+  return { stream, isReady, error, currentAngle, currentState, debugInfo };
 }

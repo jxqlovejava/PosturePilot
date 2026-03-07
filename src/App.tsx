@@ -11,8 +11,10 @@ export default function App() {
   const [workDuration, setWorkDuration] = useState(45);
   const [restDuration, setRestDuration] = useState(5);
   const [sensitivity, setSensitivity] = useState(6);
+  const [enableDistanceMonitoring, setEnableDistanceMonitoring] = useState(false);
   const [postureState, setPostureState] = useState<PostureState>('good');
   const [showTimer, setShowTimer] = useState(true);
+  const [showDebug, setShowDebug] = useState(false);
   
   // Initialize language from localStorage or default to 'zh'
   const [language, setLanguage] = useState<Language>(() => {
@@ -81,12 +83,14 @@ export default function App() {
     setPostureState(state);
   }, []);
 
-  const { stream, error, currentAngle, currentState, isReady } = usePostureDetection({
+  const { stream, error, currentAngle, currentState, isReady, debugInfo } = usePostureDetection({
     enabled: isCameraEnabled,
     sensitivity,
+    enableDistanceMonitoring,
     onPostureChange: handlePostureChange,
     videoRef,
-    canvasRef
+    canvasRef,
+    showDebug
   });
 
   useEffect(() => {
@@ -103,6 +107,10 @@ export default function App() {
     islandState = 'warning_slouch';
   } else if (isCameraEnabled && postureState === 'lean_forward') {
     islandState = 'warning_lean_forward';
+  } else if (isCameraEnabled && postureState === 'too_close') {
+    islandState = 'warning_too_close';
+  } else if (isCameraEnabled && postureState === 'too_far') {
+    islandState = 'warning_too_far';
   } else if (isCameraEnabled && postureState === 'tilt_left') {
     islandState = 'warning_left';
   } else if (isCameraEnabled && postureState === 'tilt_right') {
@@ -146,16 +154,21 @@ export default function App() {
           toggleTimer={toggleTimer}
           resetTimer={resetTimer}
           timeLeft={timeLeft}
+          timerState={timerState}
           workDuration={workDuration}
           setWorkDuration={setWorkDuration}
           restDuration={restDuration}
           setRestDuration={setRestDuration}
           sensitivity={sensitivity}
           setSensitivity={setSensitivity}
+          enableDistanceMonitoring={enableDistanceMonitoring}
+          setEnableDistanceMonitoring={setEnableDistanceMonitoring}
           stream={stream}
           error={error}
           showTimer={showTimer}
           setShowTimer={setShowTimer}
+          showDebug={showDebug}
+          setShowDebug={setShowDebug}
           onClose={() => setIsDashboardOpen(false)}
           language={language}
           setLanguage={setLanguage}
@@ -166,6 +179,7 @@ export default function App() {
           currentAngle={currentAngle}
           currentState={currentState}
           isReady={isReady}
+          debugInfo={debugInfo}
         />
       </motion.main>
     </div>
